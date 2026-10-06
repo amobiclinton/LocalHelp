@@ -1,154 +1,169 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from 'react-native';
+import { saveAuthToken } from '../services/auth';
+import { apiPost } from '../services/api';
 import theme from '../theme';
 
-export default function HomeScreen({ navigation }) {
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.eyebrow}>LocalHelp</Text>
-      <Text style={styles.title}>What do you need help with?</Text>
+export default function AuthScreen({ navigation }) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-      <View style={styles.askBox}>
+  const handleSubmit = async () => {
+    if (!email || !password || (!isLogin && !fullName)) {
+      Alert.alert('Missing fields', 'Please fill in the required information.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const payload = isLogin
+        ? { email, password }
+        : { fullName, email, password, city: 'Karu', district: 'Abuja' };
+
+      const endpoint = isLogin ? '/auth/login' : '/auth/register';
+      const response = await apiPost(endpoint, payload);
+
+      if (!response.token) {
+        throw new Error('Authentication failed');
+      }
+
+      await saveAuthToken(response.token);
+      navigation.replace('Home');
+    } catch (error) {
+      Alert.alert('Authentication error', error.message || 'Something went wrong.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.container}
+    >
+      <View style={styles.card}>
+        <Text style={styles.brand}>LocalHelp</Text>
+        <Text style={styles.title}>{isLogin ? 'Welcome back' : 'Create your account'}</Text>
+        <Text style={styles.subtitle}>
+          {isLogin ? 'Sign in to ask and reply nearby.' : 'Join your local community in Karu, Abuja.'}
+        </Text>
+
+        {!isLogin && (
+          <TextInput
+            value={fullName}
+            onChangeText={setFullName}
+            placeholder="Full name"
+            placeholderTextColor={theme.colors.muted}
+            style={styles.input}
+            autoCapitalize="words"
+          />
+        )}
+
         <TextInput
-          placeholder="Ask a question nearby..."
+          value={email}
+          onChangeText={setEmail}
+          placeholder="Email address"
           placeholderTextColor={theme.colors.muted}
+          keyboardType="email-address"
+          autoCapitalize="none"
           style={styles.input}
         />
-      </View>
 
-      <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('AskQuestion')}>
-          <Text style={styles.primaryButtonText}>Ask by Voice</Text>
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          placeholder="Password"
+          placeholderTextColor={theme.colors.muted}
+          secureTextEntry
+          style={styles.input}
+        />
+
+        <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit} disabled={loading}>
+          <Text style={styles.primaryButtonText}>{loading ? 'Please wait...' : isLogin ? 'Log In' : 'Create Account'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('AskQuestion')}>
-          <Text style={styles.secondaryButtonText}>Ask by Text</Text>
+
+        <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
+          <Text style={styles.toggleText}>
+            {isLogin ? 'Need an account? Sign up' : 'Already have an account? Log in'}
+          </Text>
         </TouchableOpacity>
       </View>
-
-      <TouchableOpacity style={styles.categoryButton} onPress={() => navigation.navigate('QuestionDetail')}>
-        <Text style={styles.categoryButtonText}>Browse Categories</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.sectionTitle}>Trending nearby</Text>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Where can I buy good food near here?</Text>
-        <Text style={styles.cardMeta}>Food • 2 replies • Karu</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Reliable dry cleaner in the area?</Text>
-        <Text style={styles.cardMeta}>Cleaning • 5 replies • Abuja</Text>
-      </View>
-    </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    justifyContent: 'center',
     backgroundColor: theme.colors.background,
-  },
-  content: {
     padding: 20,
   },
-  eyebrow: {
+  card: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  brand: {
     color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: 14,
+    fontWeight: '800',
+    fontSize: 28,
     marginBottom: 8,
   },
   title: {
-    fontSize: 30,
-    fontWeight: '800',
     color: theme.colors.text,
-    marginBottom: 20,
+    fontSize: 26,
+    fontWeight: '800',
+    marginBottom: 8,
   },
-  askBox: {
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.radius,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+  subtitle: {
+    color: theme.colors.muted,
+    fontSize: 15,
     marginBottom: 16,
   },
   input: {
+    backgroundColor: '#F3F6F9',
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
     fontSize: 16,
+    marginBottom: 12,
     color: theme.colors.text,
   },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 16,
-  },
   primaryButton: {
-    flex: 1,
     backgroundColor: theme.colors.primary,
+    borderRadius: 12,
     padding: 16,
-    borderRadius: theme.radius,
     alignItems: 'center',
+    marginTop: 10,
   },
   primaryButtonText: {
     color: theme.colors.white,
     fontWeight: '700',
     fontSize: 16,
   },
-  secondaryButton: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-    padding: 16,
-    borderRadius: theme.radius,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: theme.colors.text,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  categoryButton: {
-    backgroundColor: theme.colors.accent,
-    padding: 16,
-    borderRadius: theme.radius,
-    marginBottom: 24,
-    alignItems: 'center',
-  },
-  categoryButtonText: {
-    color: theme.colors.text,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 12,
-    color: theme.colors.text,
-  },
-  card: {
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.radius,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  cardTitle: {
-    fontSize: 17,
-    color: theme.colors.text,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  cardMeta: {
-    fontSize: 13,
-    color: theme.colors.muted,
+  toggleText: {
+    marginTop: 18,
+    textAlign: 'center',
+    color: theme.colors.primary,
+    fontWeight: '600',
   },
 });

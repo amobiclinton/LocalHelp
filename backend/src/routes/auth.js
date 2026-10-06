@@ -1,73 +1,46 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { pool } = require('../config/db');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const { Pool } = require('pg');
 
-const router = express.Router();
+dotenv.config();
 
-router.post('/register', async (req, res) => {
+const app = express();
+const port = process.env.PORT || 5000;
+
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+});
+
+app.get('/api/health', async (req, res) => {
   try {
-    const { fullName, email, password, city, district } = req.body;
-
-    if (!fullName || !email || !password) {
-      return res.status(400).json({ message: 'Name, email and password are required' });
-    }
-
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existing.rows.length > 0) {
-      return res.status(409).json({ message: 'User already exists' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const result = await pool.query(
-      `INSERT INTO users (full_name, email, password_hash, city, district, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
-       RETURNING id, full_name, email, city, district`,
-      [fullName, email, passwordHash, city || 'Karu', district || 'Abuja']
-    );
-
-    const user = result.rows[0];
-    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-    return res.status(201).json({ user, token });
+    const result = await pool.query('SELECT NOW()');
+    res.json({ status: 'ok', time: result.rows[0].now });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Registration failed' });
+    res.status(500).json({ status: 'error', message: 'Database unavailable' });
   }
 });
 
-router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/questions', require('./routes/questions'));
+app.use('/api/replies', require('./routes/replies'));
+app.use('/api/users', require('./routes/users'));
 
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    const user = result.rows[0];
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return res.status(401).json({ message: 'Invalid password' });
-    }
-
-    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    return res.json({
-      user: {
-        id: user.id,
-        fullName: user.full_name,
-        email: user.email,
-        city: user.city,
-        district: user.district,
-      },
-      token,
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Login failed' });
-  }
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: 'Something went wrong' });
 });
 
-module.exports = router;
+app.listen(port, () => {
+  console.log(`LocalHelp API running on http://localhost:${port}`);
+});
+
+module.exports = { app, pool };
